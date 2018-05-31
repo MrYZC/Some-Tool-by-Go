@@ -20,6 +20,7 @@ var tansferRow float64
 var tansferAllRow float64
 
 var numRow int
+var numRowAll int
 var bufferColA, bufferColB, bufferColC, bufferColD, bufferColE, bufferColF, bufferColG, bufferColH, bufferColI, bufferColJ, bufferColK bytes.Buffer
 var ColA, ColB, ColC, ColD, ColE, ColF, ColG, ColH, ColI, ColJ, ColK string
 var ListBuf uint16
@@ -129,12 +130,14 @@ func createXlsx(numRowRead int, arrRev *[]uint16) {
 		}
 		rowLast := xlsx.GetRows("Sheet1")
 		RowLastNum := len(rowLast)
+		fmt.Println("RowLastNum:", RowLastNum)
+		fmt.Println(RowLastNum, numRow)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		for ii := RowLastNum; ii < numRow+2; ii++ {
-			strii := strconv.Itoa(ii)
+		for ii := RowLastNum + 2; ii < RowLastNum+numRow+2; ii++ {
+			strii := strconv.Itoa(ii - 1)
 			bufferColA.WriteString("A")
 			bufferColA.WriteString(strii)
 			bufferColB.WriteString("B")
@@ -168,17 +171,17 @@ func createXlsx(numRowRead int, arrRev *[]uint16) {
 			ColI = bufferColI.String()
 			ColJ = bufferColJ.String()
 			ColK = bufferColK.String()
-			xlsx.SetCellValue("Sheet1", ColA, (*arrRev)[(ii-2)*9])
-			xlsx.SetCellValue("Sheet1", ColB, (*arrRev)[(ii-2)*9+1])
-			xlsx.SetCellValue("Sheet1", ColC, (*arrRev)[(ii-2)*9+2])
+			xlsx.SetCellValue("Sheet1", ColA, (*arrRev)[(ii-2-RowLastNum)*9])
+			xlsx.SetCellValue("Sheet1", ColB, (*arrRev)[(ii-2-RowLastNum)*9+1])
+			xlsx.SetCellValue("Sheet1", ColC, (*arrRev)[(ii-2-RowLastNum)*9+2])
 			xlsx.SetCellValue("Sheet1", ColD, "")
-			xlsx.SetCellValue("Sheet1", ColE, (*arrRev)[(ii-2)*9+3])
-			xlsx.SetCellValue("Sheet1", ColF, (*arrRev)[(ii-2)*9+4])
-			xlsx.SetCellValue("Sheet1", ColG, (*arrRev)[(ii-2)*9+5])
+			xlsx.SetCellValue("Sheet1", ColE, (*arrRev)[(ii-2-RowLastNum)*9+3])
+			xlsx.SetCellValue("Sheet1", ColF, (*arrRev)[(ii-2-RowLastNum)*9+4])
+			xlsx.SetCellValue("Sheet1", ColG, (*arrRev)[(ii-2-RowLastNum)*9+5])
 			xlsx.SetCellValue("Sheet1", ColH, "")
-			xlsx.SetCellValue("Sheet1", ColI, (*arrRev)[(ii-2)*9+6])
-			xlsx.SetCellValue("Sheet1", ColJ, (*arrRev)[(ii-2)*9+7])
-			xlsx.SetCellValue("Sheet1", ColK, (*arrRev)[(ii-2)*9+8])
+			xlsx.SetCellValue("Sheet1", ColI, (*arrRev)[(ii-2-RowLastNum)*9+6])
+			xlsx.SetCellValue("Sheet1", ColJ, (*arrRev)[(ii-2-RowLastNum)*9+7])
+			xlsx.SetCellValue("Sheet1", ColK, (*arrRev)[(ii-2-RowLastNum)*9+8])
 			bufferColA.Reset()
 			bufferColB.Reset()
 			bufferColC.Reset()
@@ -190,11 +193,14 @@ func createXlsx(numRowRead int, arrRev *[]uint16) {
 			bufferColI.Reset()
 			bufferColJ.Reset()
 			bufferColK.Reset()
-			fmt.Printf("生成Excel进度: %d%%\n", 100*ii/(numRow+1))
+			fmt.Printf("生成Excel进度: %d%%\n", 100*(ii-RowLastNum-1)/numRow)
 		}
 		err1 := xlsx.SaveAs("./空气检测.xlsx")
 		if err1 != nil {
-			fmt.Println(err1)
+			fmt.Println("请关闭文件:", err1)
+			numRowAll = recordDownLoad()
+			fileTxt, _ := os.OpenFile(pathTxt, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+			fileTxt.Truncate(16)
 		}
 	}
 }
@@ -281,24 +287,25 @@ func recordUpload(numRowUpLoad int, arrRev *[]uint16) {
 	fileRecord, err := os.OpenFile(pathRecord, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Println("Create or Open fileRecord:", err)
+		os.Exit(0)
 	}
 	defer fileRecord.Close()
 	nextLine = append(nextLine, 0x0a)
 	fileRecord.Write(nextLine)
 	fileRecord.WriteString("上传日志的行数：")
 	fileRecord.Write(nextLine)
-	fileRecord.WriteString(strconv.Itoa(numRowUpLoad + 1))
+	fileRecord.WriteString(strconv.Itoa(numRowUpLoad))
 }
 
 func main() {
 	logLine := recordDownLoad() // 日志记录上次所读的行
-	fmt.Println(logLine)
+	// fmt.Println(logLine)
 	fileBin, err := os.OpenFile(pathBin, os.O_RDWR, 0666)
 	if err != nil {
 		fmt.Println("解析bin文件失败, 请查看是否把单片机的UserDb.bin文件拷贝到当前文件夹:", err)
 		return
 	}
-	fileTxt, err := os.OpenFile(pathTxt, os.O_RDWR|os.O_CREATE, 0666)
+	fileTxt, err := os.OpenFile(pathTxt, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	defer fileBin.Close()
 	defer fileTxt.Close()
 	if err != nil {
@@ -335,26 +342,31 @@ func main() {
 		}
 		binDataSlice = append(binDataSlice, ListBuf)
 	}
-	fmt.Println("len:", len(binDataSlice))
-	fmt.Println(logLine)
-	numRowAll := int(math.Floor(float64(len(binDataSlice) / 9)))
+	// fmt.Println("len:", len(binDataSlice))
+	// fmt.Println(logLine)
+	numRowAll = int(math.Floor(float64(len(binDataSlice) / 9)))
+	// fmt.Println("bin文件数据切片:", len(binDataSlice))
+	// fmt.Println("logline:", logLine)
 	binDataSlice = binDataSlice[9*logLine:]
+	fmt.Println("yzc:", len(binDataSlice))
 	tansferAllRow = math.Floor(float64(len(binDataSlice) / 9))
-	for ii := range binDataSlice {
-		if ii%9 != 8 {
-			fmt.Fprintf(fileTxt, "%6d\t", binDataSlice[ii])
-		}
-		if ii%9 == 8 {
-			tansferRow = float64((ii + 1) / 9)
-			fmt.Fprintf(fileTxt, "%6d\n", binDataSlice[ii])
-			fmt.Printf("转换第%d行数据成TXT文本完毕, 已完成%f%%\n", (ii+1)/9+9*logLine, 100*tansferRow/tansferAllRow)
-			numRow++
-		}
-		if ii == len(binDataSlice)-1 {
-			fmt.Println("所有数据已转换成TXT文本完毕。 请等待3秒准备把数据写入Excel表格")
+	if len(binDataSlice) > 0 {
+		for ii := range binDataSlice {
+			if ii%9 != 8 {
+				fmt.Fprintf(fileTxt, "%6d\t", binDataSlice[ii])
+			}
+			if ii%9 == 8 {
+				tansferRow = float64((ii + 1) / 9)
+				fmt.Fprintf(fileTxt, "%6d\n", binDataSlice[ii])
+				fmt.Printf("转换第%d行数据成TXT文本完毕, 已完成%f%%\n", (ii+1)/9+9*logLine, 100*tansferRow/tansferAllRow)
+				numRow++
+			}
+			if ii == len(binDataSlice)-1 {
+				fmt.Println("所有数据已转换成TXT文本完毕。 请等待准备把数据写入Excel表格")
+			}
 		}
 	}
 	//time.Sleep(3 * time.Second)
-	createXlsx(numRow, &binDataSlice)
-	recordUpload(numRowAll, &binDataSlice)
+	createXlsx(logLine, &binDataSlice)
+	recordUpload(numRowAll, &binDataSlice)                                                       
 }
